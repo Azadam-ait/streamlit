@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import plotly.io as pio
 from io import BytesIO
 
 
@@ -63,33 +64,43 @@ def ks_test(statistics):
 
 
 def plot_benford(statistics, title):
-    is_two_digits = len(statistics) > 20
-    fig_width = 16 if is_two_digits else 10
-    fig, ax = plt.subplots(figsize=(fig_width, 6))
-    x = np.arange(len(statistics))
-    width = 0.42 if not is_two_digits else 0.78
-
+    digits = statistics["digit"].astype(str)
     observed = statistics["percent"] * 100
     expected = statistics["benford"] * 100
 
-    ax.bar(x - width / 2, observed, width, label="Observed", color="steelblue")
-    ax.bar(x + width / 2, expected, width, label="Benford expected", color="darkorange")
+    figure = go.Figure()
+    figure.add_bar(
+        x=digits,
+        y=observed,
+        name="Observed",
+        marker_color="#4C78A8",
+        hovertemplate="Leading digits: %{x}<br>Observed: %{y:.2f}%<extra></extra>",
+    )
+    figure.add_bar(
+        x=digits,
+        y=expected,
+        name="Benford expected",
+        marker_color="#F58518",
+        hovertemplate="Leading digits: %{x}<br>Benford: %{y:.2f}%<extra></extra>",
+    )
 
-    if is_two_digits:
-        tick_positions = np.arange(0, len(statistics), 5)
-        ax.set_xticks(tick_positions)
-        ax.set_xticklabels(statistics.iloc[tick_positions]["digit"].astype(str), rotation=45, ha="right")
-    else:
-        ax.set_xticks(x)
-        ax.set_xticklabels(statistics["digit"].astype(str))
+    figure.update_layout(
+        title=title,
+        xaxis_title="Leading digit(s)",
+        yaxis_title="Frequency (%)",
+        barmode="group",
+        bargap=0.15,
+        legend_title_text="Series",
+        hovermode="x unified",
+        template="plotly_white",
+        height=600,
+        margin=dict(l=60, r=30, t=70, b=120 if len(statistics) > 20 else 60),
+    )
 
-    ax.set_xlabel("Leading digit(s)")
-    ax.set_ylabel("Frequency (%)")
-    ax.set_title(title)
-    ax.legend()
-    ax.grid(axis="y", alpha=0.25)
-    fig.tight_layout()
-    return fig
+    if len(statistics) > 20:
+        figure.update_xaxes(tickangle=-45, nticks=20)
+
+    return figure
 
 
 st.set_page_config(page_title="Data Filter", layout="wide")
@@ -252,7 +263,7 @@ if uploaded_file is not None:
 
                 chart_title = f"Benford's Law Analysis for {column} (Digits: {digits})"
                 figure = plot_benford(statistics, chart_title)
-                st.pyplot(figure)
+                st.plotly_chart(figure, use_container_width=True)
 
                 download_csv = display_statistics.rename(columns={
                     "digit": "leading_digits",
@@ -297,25 +308,36 @@ if uploaded_file is not None:
                     "text/plain",
                 )
 
-                png_buffer = BytesIO()
-                figure.savefig(png_buffer, format="png", dpi=300, bbox_inches="tight")
-                png_buffer.seek(0)
+                html_chart = figure.to_html(full_html=True, include_plotlyjs="cdn")
                 st.download_button(
-                    "Download visualization (PNG)",
-                    png_buffer.getvalue(),
-                    f"benford_{digits}_digit_chart.png",
-                    "image/png",
+                    "Download interactive visualization (HTML)",
+                    html_chart.encode("utf-8"),
+                    f"benford_{digits}_digit_chart.html",
+                    "text/html",
                 )
 
-                pdf_buffer = BytesIO()
-                figure.savefig(pdf_buffer, format="pdf", bbox_inches="tight")
-                pdf_buffer.seek(0)
-                st.download_button(
-                    "Download visualization (PDF)",
-                    pdf_buffer.getvalue(),
-                    f"benford_{digits}_digit_chart.pdf",
-                    "application/pdf",
-                )
+                try:
+                    png_buffer = BytesIO()
+                    pio.write_image(figure, png_buffer, format="png", width=1200, height=600, scale=2)
+                    png_buffer.seek(0)
+                    st.download_button(
+                        "Download visualization (PNG)",
+                        png_buffer.getvalue(),
+                        f"benford_{digits}_digit_chart.png",
+                        "image/png",
+                    )
+
+                    pdf_buffer = BytesIO()
+                    pio.write_image(figure, pdf_buffer, format="pdf", width=1200, height=600)
+                    pdf_buffer.seek(0)
+                    st.download_button(
+                        "Download visualization (PDF)",
+                        pdf_buffer.getvalue(),
+                        f"benford_{digits}_digit_chart.pdf",
+                        "application/pdf",
+                    )
+                except Exception:
+                    st.info("PNG/PDF export requires the optional Plotly Kaleido package. HTML export is still available.")
         else:
             st.info("No numeric columns are available for Benford's Law analysis.")
 
