@@ -1,6 +1,5 @@
-matplotlib
-matplotlib.pyplot
-numpy
-pandas
 streamlit
+pandas
+numpy
+matplotlib
 BytesIO
